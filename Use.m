@@ -1,7 +1,7 @@
 classdef Use < dynamicprops
-    %USE Load a checksum-verified MATLAB file or ZIP for this object lifetime.
-    %   U = USE(SOURCE, SHA256) accepts a local .m/.zip file or an HTTPS URL.
-    %   SHA256 is the expected 64-character hexadecimal digest of the file.
+    %USE Load a MATLAB file or ZIP for this object lifetime.
+    %   U = USE(SOURCE) accepts a local .m/.zip file or an HTTPS URL.
+    %   U = USE(SOURCE, SHA256) checks the expected 64-character digest.
     %   Public functions in the package are exposed as handles on U. Delete
     %   U to remove its folders from the MATLAB path and its temporary files.
 
@@ -10,15 +10,22 @@ classdef Use < dynamicprops
         path_variable = ''
     end
 
+    properties (SetAccess = private)
+        Digest = '' % SHA-256 digest of the loaded file
+        Verified = false % True when an expected digest was supplied and matched
+    end
+
     methods
         function obj = Use(source, expected_sha256)
-            if nargin ~= 2
-                error('Use:Arguments', 'Provide a source and its expected SHA-256 digest.');
+            if nargin < 1 || nargin > 2
+                error('Use:Arguments', 'Provide a source and optional expected SHA-256 digest.');
             end
             source = Use.text_scalar(source, 'source');
-            expected_sha256 = lower(Use.text_scalar(expected_sha256, 'SHA-256 digest'));
-            if isempty(regexp(expected_sha256, '^[0-9a-f]{64}$', 'once'))
-                error('Use:Digest', 'The SHA-256 digest must have 64 hexadecimal characters.');
+            if nargin == 2
+                expected_sha256 = lower(Use.text_scalar(expected_sha256, 'SHA-256 digest'));
+                if isempty(regexp(expected_sha256, '^[0-9a-f]{64}$', 'once'))
+                    error('Use:Digest', 'The SHA-256 digest must have 64 hexadecimal characters.');
+                end
             end
 
             remote = startsWith(source, 'https://');
@@ -53,10 +60,17 @@ classdef Use < dynamicprops
                     error('Use:ArtifactSize', 'The source file exceeds the 250 MB limit.');
                 end
                 actual_sha256 = Use.sha256(downloaded_file);
-                if ~strcmp(actual_sha256, expected_sha256)
-                    error('Use:ChecksumMismatch', ...
-                        'SHA-256 mismatch: expected %s, received %s.', ...
-                        expected_sha256, actual_sha256);
+                obj.Digest = actual_sha256;
+                if nargin == 2
+                    if ~strcmp(actual_sha256, expected_sha256)
+                        error('Use:ChecksumMismatch', ...
+                            'SHA-256 mismatch: expected %s, received %s.', ...
+                            expected_sha256, actual_sha256);
+                    end
+                    obj.Verified = true;
+                elseif remote
+                    warning('Use:UnverifiedSource', ...
+                        'Loading unverified remote code. SHA-256: %s', actual_sha256);
                 end
 
                 source_directory = fullfile(obj.directory, 'source');
