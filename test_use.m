@@ -1,5 +1,5 @@
 function test_use
-%TEST_USE Offline checks for verified single-file and ZIP imports.
+%TEST_USE Offline checks for exploratory and verified imports.
     fixture_dir = tempname;
     mkdir(fixture_dir);
     remove_fixture = onCleanup(@() rmdir(fixture_dir, 's')); %#ok<NASGU>
@@ -18,8 +18,16 @@ function test_use
 
     digest = Use.sha256(source_file);
     assert(numel(digest) == 64);
+    imported = Use(source_file);
+    assert(imported.use_fixture_add(2) == 3);
+    assert(strcmp(imported.Digest, digest));
+    assert(~imported.Verified);
+    delete(imported);
+    assert(strcmp(path, initial_path));
+
     imported = Use(source_file, digest);
     assert(imported.use_fixture_add(4) == 5);
+    assert(imported.Verified);
     delete(imported);
     assert(strcmp(path, initial_path));
 
