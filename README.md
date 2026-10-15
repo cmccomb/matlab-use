@@ -88,4 +88,4 @@ access. GitHub Actions runs them on pull requests and changes to `main`.
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+BSD 3-Clause. See [LICENSE](LICENSE). Earlier releases used MIT; see [LEGACY_LICENSE.md](LEGACY_LICENSE.md) for the original notice.
