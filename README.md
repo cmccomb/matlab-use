@@ -36,6 +36,31 @@ can pin it later. For shared or repeatable work, obtain the expected digest
 from a trusted, independently reviewed copy before calling `Use`. A checksum
 pins bytes; it does not establish that the code is trustworthy.
 
+## Project manifest and cache
+
+Store pinned dependencies in a JSON manifest. The
+[example manifest](examples/use.json) records a fixed `rand_index` source and
+digest:
+
+```matlab
+dependency = Use.fromManifest('examples/use.json', 'rand_index');
+score = dependency.rand_index([1 1 2 2], [4 4 7 7]);
+delete(dependency);
+```
+
+The manifest format has `schemaVersion: 1` and a `dependencies` array. Each
+entry has a unique `name`, a `source` ending in `.m` or `.zip`, and a required
+`sha256` digest. Local sources are resolved relative to the manifest file.
+`Use.fromManifest(manifest, name, cacheDirectory)` selects a custom cache;
+otherwise the cache is stored under MATLAB's `prefdir`.
+
+The cache uses a directory named by digest and preserves the source filename,
+which MATLAB needs for `.m` functions. Every cache hit is checked against the
+manifest digest before use. A missing or corrupt entry is fetched
+from its source and verified before it is cached. A valid cached copy can be
+used even when its original source is temporarily unavailable. Delete the
+cached files to reclaim disk space; the next load will fetch them again.
+
 ## Current behavior
 
 - Computes SHA-256 for every source. An optional expected digest must contain

@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "dependencies": [
+    {
+      "name": "rand_index",
+      "source": "https://raw.githubusercontent.com/cmccomb/rand_index/b4ba97ff9a6a9bb0fb8ea773d1f36f8fd55f3850/rand_index.m",
+      "sha256": "0f87777b730e1f61fe4f4189ebeddd4b81fe92bf60b6c7d4076d1180aacba74f"
+    }
+  ]
+}
