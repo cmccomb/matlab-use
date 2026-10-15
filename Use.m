@@ -104,6 +104,110 @@ classdef Use < dynamicprops
     end
 
     methods (Static)
+        function obj = fromManifest(manifest_filename, dependency_name, cache_directory)
+            %FROMMANIFEST Load a named, SHA-256-pinned dependency from JSON.
+            %   U = USE.FROMMANIFEST(FILE, NAME) reuses a verified artifact
+            %   from the user cache when available. A third argument selects
+            %   another cache directory, which is useful for testing.
+            if nargin < 2 || nargin > 3
+                error('Use:ManifestArguments', ...
+                    'Provide a manifest filename, dependency name, and optional cache directory.');
+            end
+            manifest_filename = Use.text_scalar(manifest_filename, 'manifest filename');
+            dependency_name = Use.text_scalar(dependency_name, 'dependency name');
+            if exist(manifest_filename, 'file') ~= 2
+                error('Use:ManifestFile', 'The manifest file does not exist.');
+            end
+            if nargin < 3
+                cache_directory = fullfile(prefdir, 'matlab-use', 'cache');
+            else
+                cache_directory = Use.text_scalar(cache_directory, 'cache directory');
+            end
+
+            manifest = jsondecode(fileread(manifest_filename));
+            if ~isstruct(manifest) || ~isscalar(manifest) || ...
+                    ~isfield(manifest, 'schemaVersion') || ...
+                    ~isequal(manifest.schemaVersion, 1) || ...
+                    ~isfield(manifest, 'dependencies') || ...
+                    ~isstruct(manifest.dependencies)
+                error('Use:ManifestFormat', ...
+                    'Expected schemaVersion 1 and an array of dependency objects.');
+            end
+            dependencies = manifest.dependencies;
+            names = cell(1, numel(dependencies));
+            for k = 1:numel(dependencies)
+                entry = dependencies(k);
+                if ~isfield(entry, 'name') || ~isfield(entry, 'source') || ...
+                        ~isfield(entry, 'sha256')
+                    error('Use:ManifestFormat', ...
+                        'Each dependency needs name, source, and sha256 fields.');
+                end
+                names{k} = Use.text_scalar(entry.name, 'dependency name');
+            end
+            if numel(unique(names)) ~= numel(names)
+                error('Use:ManifestFormat', 'Dependency names must be unique.');
+            end
+            selected = find(strcmp(names, dependency_name), 1);
+            if isempty(selected)
+                error('Use:UnknownDependency', ...
+                    'Dependency %s was not found in the manifest.', dependency_name);
+            end
+
+            entry = dependencies(selected);
+            source = Use.text_scalar(entry.source, 'dependency source');
+            digest = lower(Use.text_scalar(entry.sha256, 'SHA-256 digest'));
+            if isempty(regexp(digest, '^[0-9a-f]{64}$', 'once'))
+                error('Use:ManifestFormat', ...
+                    'The dependency SHA-256 digest must have 64 hexadecimal characters.');
+            end
+            remote = startsWith(source, 'https://');
+            if ~remote && contains(source, '://')
+                error('Use:Source', 'Remote sources must use HTTPS.');
+            end
+            if remote
+                source_path = regexp(source, '^[^?#]+', 'match', 'once');
+            else
+                if ~java.io.File(source).isAbsolute()
+                    [manifest_folder, ~, ~] = fileparts(manifest_filename);
+                    if isempty(manifest_folder)
+                        manifest_folder = pwd;
+                    end
+                    source = fullfile(manifest_folder, source);
+                end
+                source_path = source;
+            end
+            [~, source_name, extension] = fileparts(source_path);
+            extension = lower(extension);
+            if ~any(strcmp(extension, {'.m', '.zip'}))
+                error('Use:Source', 'The source must be a .m file or .zip archive.');
+            end
+
+            cache_entry_directory = fullfile(cache_directory, digest);
+            cached_file = fullfile(cache_entry_directory, [source_name extension]);
+            if exist(cached_file, 'file') == 2 && ...
+                    strcmp(Use.sha256(cached_file), digest)
+                obj = Use(cached_file, digest);
+                return;
+            end
+
+            obj = Use(source, digest);
+            temporary_cache_file = '';
+            try
+                if exist(cache_entry_directory, 'dir') ~= 7
+                    mkdir(cache_entry_directory);
+                end
+                temporary_cache_file = [cached_file '.' char(java.util.UUID.randomUUID()) '.tmp'];
+                copyfile(fullfile(obj.directory, ['artifact' extension]), temporary_cache_file);
+                movefile(temporary_cache_file, cached_file, 'f');
+            catch err
+                if ~isempty(temporary_cache_file) && ...
+                        exist(temporary_cache_file, 'file') == 2
+                    delete(temporary_cache_file);
+                end
+                warning('Use:CacheWrite', 'Dependency loaded, but cache write failed: %s', err.message);
+            end
+        end
+
         function digest = sha256(filename)
             %SHA256 Calculate a file digest for a reviewed local artifact.
             filename = Use.text_scalar(filename, 'filename');

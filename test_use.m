@@ -60,6 +60,40 @@ function test_use
     end
     assert(strcmp(path, initial_path));
 
+    manifest_file = fullfile(fixture_dir, 'use.json');
+    fid = fopen(manifest_file, 'w');
+    fprintf(fid, ['{"schemaVersion":1,"dependencies":[' ...
+        '{"name":"fixture","source":"use_fixture_add.m","sha256":"%s"}]}'], digest);
+    fclose(fid);
+    cache_directory = fullfile(fixture_dir, 'cache');
+    imported = Use.fromManifest(manifest_file, 'fixture', cache_directory);
+    assert(imported.use_fixture_add(11) == 12);
+    assert(imported.Verified);
+    delete(imported);
+    cached_file = fullfile(cache_directory, digest, 'use_fixture_add.m');
+    assert(exist(cached_file, 'file') == 2);
+    assert(strcmp(Use.sha256(cached_file), digest));
+
+    fid = fopen(cached_file, 'w');
+    fwrite(fid, 'corrupt cache entry');
+    fclose(fid);
+    imported = Use.fromManifest(manifest_file, 'fixture', cache_directory);
+    assert(imported.use_fixture_add(12) == 13);
+    delete(imported);
+    assert(strcmp(Use.sha256(cached_file), digest));
+
+    delete(source_file);
+    imported = Use.fromManifest(manifest_file, 'fixture', cache_directory);
+    assert(imported.use_fixture_add(13) == 14);
+    delete(imported);
+    assert(strcmp(path, initial_path));
+    try
+        Use.fromManifest(manifest_file, 'unknown', cache_directory);
+        error('Expected a missing dependency error.');
+    catch err
+        assert(strcmp(err.identifier, 'Use:UnknownDependency'));
+    end
+
     try
         Use('http://example.com/test.m', digest);
         error('Expected HTTP to be rejected.');
